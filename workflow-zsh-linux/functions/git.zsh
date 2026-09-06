@@ -72,22 +72,33 @@ _show_help() {
   push, p        Commit + Push automático
   commit, c      Solo commit local
   release, r     Tag SemVer + release en GitHub (CRUD: create/list/view/edit/delete/open)
-  merge, m       Merge entre ramas
+  merge, m       Merge entre ramas (--strategy=ours|theirs)
   switch, sw     Cambiar de rama (auto-stash)
-  flow, f        Menú interactivo
-  clean, cl      Limpiar archivos innecesarios (node_modules, etc)
+  flow, f        Menú interactivo rápido
+  clean, cl      Limpiar archivos innecesarios (node_modules, dist…)
   submodule, sub Gestión de submódulos (añadir, borrar, arreglar rotos)
-  remote, rem    Configurar remotos
-  tag, t         Menú de tags y releases (sin args); con args pasa a git tag
+  remote, rem    Configurar remotos (SSH/gh)
+  tag, t         Menú de tags (create/list/delete/rename/edit)
 
- ${C_YELLOW}Passthrough de git:${C_RESET}
-  s|status   b|branch   l|log   d|diff    ft|fetch
-  co|checkout  pl|pull  sta|stash  rs|reset  restore
-  rb|rebase  show       sync = remote update + pull --rebase
+ ${C_YELLOW}Submenús interactivos (sin args = gum menu, con args = passthrough):${C_RESET}
+  branch, b      list / list-all (-a) / create / delete-local / delete-remote / rename
+  status, s      short (-sb) / long / porcelain / ignored
+  log, l         graph / full / stat / author / last N
+  diff, d        working / staged / stat / compact / branches
+  stash, sta     push / list / pop / apply / show / drop / clear
+  reset, rs      soft / mixed / hard / to-commit
+  restore        file / unstage / from-branch (--source)
+  rebase, rb     onto / interactive (-i) / abort / continue / skip
+  checkout, co   branch / create (-b) / file / detach
+  pull, pl       default / rebase / ff-only / prune / all
+  fetch, ft      default / all / prune / tags / remote
+  show           latest / pick / hash / stat / files
+  sync           default / fetch-all / prune
 
  ${C_CYAN}Ejemplos:${C_RESET}
-  useGit push          useGit tag           useGit branch -a
-  useGit stash list    useGit log --author=yo
+  useGit push              useGit tag               useGit branch -a
+  useGit stash list        useGit log --author=yo   useGit branch (→ submenú)
+  useGit fetch --all       useGit reset --hard HEAD  useGit show abc123
 EOF
 }
 
@@ -611,13 +622,14 @@ _action_release() {
   fi
 
   if [[ -z "$tag_msg" ]]; then
-    tag_msg="Release $tag_name"
-    echo -n "💬 Mensaje para el tag [Release $tag_name]: " >&2
+    tag_msg="$tag_name"
+    echo -n "💬 Mensaje para el tag [$tag_name]: " >&2
     read -r user_msg
     [[ -n "$user_msg" ]] && tag_msg="$user_msg"
   fi
 
-  git tag -a "$tag_name" -m "$tag_msg" && git push origin "$tag_name"
+  git tag -a "$tag_name" -m "$tag_msg"
+  git push origin "$tag_name"
   echo -e "${C_GREEN}✅ Tag '$tag_name' creado y subido.${C_RESET}" >&2
 
   # Release en GitHub (con aviso claro si gh no está disponible)
@@ -1149,6 +1161,1020 @@ _action_remote() {
 }
 
 # ==============================================
+# 🌿 BRANCH · Gestión de ramas
+# ==============================================
+_action_branch() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "list · listar ramas locales" \
+        "list-all · listar locales + remotas (-a)" \
+        "create · crear nueva rama" \
+        "delete-local · borrar ramas locales (lote)" \
+        "delete-remote · borrar ramas remotas (lote)" \
+        "rename · renombrar rama" \
+        --header " 🌿 BRANCH · Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "🌿 BRANCH" >&2
+      echo "1) Listar ramas locales" >&2
+      echo "2) Listar todas (local + remoto)" >&2
+      echo "3) Crear rama" >&2
+      echo "4) Borrar ramas locales (lote)" >&2
+      echo "5) Borrar ramas remotas (lote)" >&2
+      echo "6) Renombrar rama" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="list" ;; 2) choice="list-all" ;; 3) choice="create" ;;
+        4) choice="delete-local" ;; 5) choice="delete-remote" ;; 6) choice="rename" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      list)
+        git branch
+        ;;
+      list-all)
+        git branch -a
+        ;;
+      create)
+        local name
+        if command -v gum &>/dev/null; then
+          name=$(gum input --placeholder "nombre-de-la-rama")
+        else
+          echo -n "Nombre de la rama: " >&2; read -r name
+        fi
+        [[ -z "$name" ]] && continue
+        git branch "$name" && echo "✅ Rama '$name' creada." >&2
+        ;;
+      delete-local)
+        local branches nums to_delete=()
+        branches=(${(f)"$(git branch --format='%(refname:short)')"})
+        [[ ${#branches[@]} -eq 0 ]] && { echo "❌ No hay ramas locales." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          local selection
+          selection=$(printf '%s\n' "${branches[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
+          [[ -z "$selection" ]] && continue
+          to_delete=(${(f)"$selection"})
+        else
+          echo -e "${C_CYAN}🌿 Ramas locales:${C_RESET}" >&2
+          local i=1; for b in "${branches[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$b" >&2; ((i++)); done
+          echo -n "🗑️ Números (ej: 1 3 5) o 'all': " >&2
+          read -r -A nums
+          if [[ "${nums[1]}" == "all" ]]; then
+            to_delete=("${branches[@]}")
+          else
+            for num in "${nums[@]}"; do
+              [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#branches[@]} )) && to_delete+=("${branches[$num]}")
+            done
+          fi
+        fi
+        [[ ${#to_delete[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron ramas." >&2; continue; }
+        echo -e "\n${C_YELLOW}🗑️ Se borrarán ${#to_delete[@]} ramas locales:${C_RESET}" >&2
+        for b in "${to_delete[@]}"; do echo "  - $b" >&2; done
+        _confirm "¿Confirmar borrado?" || continue
+        local ok=0 fail=0
+        for b in "${to_delete[@]}"; do
+          if git branch -d "$b" 2>&1; then ((ok++)); else ((fail++)); fi
+        done
+        echo "✅ $ok borradas, $fail fallidas." >&2
+        ;;
+      delete-remote)
+        local remotes nums to_delete=()
+        remotes=(${(f)"$(git branch -r --format='%(refname:short)' 2>/dev/null | grep -v 'HEAD')"})
+        [[ ${#remotes[@]} -eq 0 ]] && { echo "❌ No hay ramas remotas." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          local selection
+          selection=$(printf '%s\n' "${remotes[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
+          [[ -z "$selection" ]] && continue
+          to_delete=(${(f)"$selection"})
+        else
+          echo -e "${C_CYAN}🌿 Ramas remotas:${C_RESET}" >&2
+          local i=1; for r in "${remotes[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$r" >&2; ((i++)); done
+          echo -n "🗑️ Números (ej: 1 3 5) o 'all': " >&2
+          read -r -A nums
+          if [[ "${nums[1]}" == "all" ]]; then
+            to_delete=("${remotes[@]}")
+          else
+            for num in "${nums[@]}"; do
+              [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#remotes[@]} )) && to_delete+=("${remotes[$num]}")
+            done
+          fi
+        fi
+        [[ ${#to_delete[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron ramas." >&2; continue; }
+        echo -e "\n${C_YELLOW}🗑️ Se borrarán ${#to_delete[@]} ramas remotas:${C_RESET}" >&2
+        for r in "${to_delete[@]}"; do echo "  - $r" >&2; done
+        _confirm "¿Confirmar borrado?" || continue
+        local ok=0 fail=0
+        for r in "${to_delete[@]}"; do
+          local remote="${r%%/*}" branch="${r#*/}"
+          echo "  → git push $remote :$branch" >&2
+          if git push "$remote" ":$branch" 2>&1; then ((ok++)); else ((fail++)); fi
+        done
+        echo "✅ $ok borradas remotamente, $fail fallidas." >&2
+        ;;
+      rename)
+        local branches old_name new_name
+        branches=(${(f)"$(git branch --format='%(refname:short)')"})
+        if command -v gum &>/dev/null; then
+          old_name=$(printf '%s\n' "${branches[@]}" | gum choose --header "Selecciona rama a renombrar")
+          [[ -z "$old_name" ]] && continue
+          new_name=$(gum input --placeholder "nuevo-nombre" --value "$old_name")
+        else
+          local i=1; for b in "${branches[@]}"; do echo "$i) $b" >&2; ((i++)); done
+          echo -n "Número: " >&2; read -r idx; old_name="${branches[$idx]}"
+          echo -n "Nuevo nombre: " >&2; read -r new_name
+        fi
+        [[ -z "$new_name" ]] && continue
+        git branch -m "$old_name" "$new_name" && echo "✅ '$old_name' → '$new_name'" >&2
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 📊 STATUS · Estado del repo
+# ==============================================
+_action_status() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "short · formato corto (-sb)" \
+        "long · formato completo" \
+        "porcelain · porcelain machine-readable" \
+        "ignored · mostrar ignorados (--ignored)" \
+
+        --header " 📊 STATUS · Elige formato Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "📊 STATUS" >&2
+      echo "1) Formato corto (-sb)" >&2
+      echo "2) Formato completo" >&2
+      echo "3) Porcelain" >&2
+      echo "4) Ignorados" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="short" ;; 2) choice="long" ;; 3) choice="porcelain" ;; 4) choice="ignored" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      short)    git status -sb ;;
+      long)     git status ;;
+      porcelain) git status --porcelain ;;
+      ignored)  git status --ignored ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 📜 LOG · Historial de commits
+# ==============================================
+_action_log() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "graph · oneline + grafo decorado" \
+        "full · log completo" \
+        "stat · con estadísticas de cambios" \
+        "author · filtrar por autor" \
+        "last · últimos N commits" \
+
+        --header " 📜 LOG · Elige formato Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "📜 LOG" >&2
+      echo "1) Oneline graph" >&2
+      echo "2) Log completo" >&2
+      echo "3) Con estadísticas" >&2
+      echo "4) Por autor" >&2
+      echo "5) Últimos N" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="graph" ;; 2) choice="full" ;; 3) choice="stat" ;;
+        4) choice="author" ;; 5) choice="last" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      graph)  git log --oneline --decorate --graph ;;
+      full)   git log ;;
+      stat)   git log --stat ;;
+      author)
+        local author
+        if command -v gum &>/dev/null; then
+          author=$(gum input --placeholder "nombre o email del autor")
+        else
+          echo -n "Autor: " >&2; read -r author
+        fi
+        [[ -z "$author" ]] && continue
+        git log --oneline --author="$author"
+        ;;
+      last)
+        local n
+        if command -v gum &>/dev/null; then
+          n=$(gum input --placeholder "número de commits (ej: 10)")
+        else
+          echo -n "Nº commits: " >&2; read -r n
+        fi
+        [[ -z "$n" ]] && continue
+        git log --oneline -n "$n"
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 🔍 DIFF · Diferencias
+# ==============================================
+_action_diff() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "working · árbol de trabajo" \
+        "staged · cambios en staging (--staged)" \
+        "stat · resumen de cambios (--stat)" \
+        "compact · staged + stat" \
+        "branches · comparar dos ramas" \
+
+        --header " 🔍 DIFF · Elige modo Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "🔍 DIFF" >&2
+      echo "1) Working tree" >&2
+      echo "2) Staged" >&2
+      echo "3) Stat" >&2
+      echo "4) Compact (staged + stat)" >&2
+      echo "5) Entre ramas" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="working" ;; 2) choice="staged" ;; 3) choice="stat" ;;
+        4) choice="compact" ;; 5) choice="branches" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      working)  git diff ;;
+      staged)   git diff --staged ;;
+      stat)     git diff --stat ;;
+      compact)  git diff --stat --staged ;;
+      branches)
+        local branches b1 b2
+        branches=(${(f)"$(git branch --format='%(refname:short)')"})
+        if command -v gum &>/dev/null; then
+          b1=$(printf '%s\n' "${branches[@]}" | gum choose --header "Rama 1 (base)")
+          [[ -z "$b1" ]] && continue
+          b2=$(printf '%s\n' "${branches[@]}" | gum choose --header "Rama 2 (comparar)")
+          [[ -z "$b2" ]] && continue
+        else
+          local i=1; for b in "${branches[@]}"; do echo "$i) $b" >&2; ((i++)); done
+          echo -n "Rama 1 (nº): " >&2; read -r idx; b1="${branches[$idx]}"
+          echo -n "Rama 2 (nº): " >&2; read -r idx; b2="${branches[$idx]}"
+        fi
+        [[ -z "$b1" || -z "$b2" ]] && continue
+        git diff "$b1".."$b2"
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 📦 STASH · Cambios guardados
+# ==============================================
+_action_stash() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "push · guardar cambios" \
+        "list · listar stashes" \
+        "pop · aplicar y eliminar último" \
+        "apply · aplicar sin eliminar" \
+        "show · ver contenido de un stash" \
+        "drop · eliminar stashes (lote)" \
+        "clear · borrar todos los stashes" \
+
+        --header " 📦 STASH · Elige acción Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "📦 STASH" >&2
+      echo "1) Push (guardar)" >&2
+      echo "2) List" >&2
+      echo "3) Pop" >&2
+      echo "4) Apply" >&2
+      echo "5) Show" >&2
+      echo "6) Drop (lote)" >&2
+      echo "7) Clear" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="push" ;; 2) choice="list" ;; 3) choice="pop" ;;
+        4) choice="apply" ;; 5) choice="show" ;; 6) choice="drop" ;; 7) choice="clear" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      push)
+        local msg
+        if command -v gum &>/dev/null; then
+          msg=$(gum input --placeholder "mensaje del stash (opcional)")
+        else
+          echo -n "Mensaje (opcional): " >&2; read -r msg
+        fi
+        if [[ -n "$msg" ]]; then
+          git stash push -m "$msg"
+        else
+          git stash push
+        fi
+        echo "✅ Cambios stasheados." >&2
+        ;;
+      list)   git stash list ;;
+      pop)    git stash pop ;;
+      apply)
+        local stash_list stash
+        stash_list=(${(f)"$(git stash list 2>/dev/null)"})
+        [[ ${#stash_list[@]} -eq 0 ]] && { echo "❌ No hay stashes." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          stash=$(printf '%s\n' "${stash_list[@]}" | gum choose --header "Selecciona stash")
+        else
+          local i=1; for s in "${stash_list[@]}"; do echo "$i) $s" >&2; ((i++)); done
+          echo -n "Número: " >&2; read -r idx; stash="${stash_list[$idx]}"
+        fi
+        [[ -z "$stash" ]] && continue
+        local stash_ref="${stash%%:*}"
+        git stash apply "$stash_ref"
+        ;;
+      show)
+        local stash_list stash
+        stash_list=(${(f)"$(git stash list 2>/dev/null)"})
+        [[ ${#stash_list[@]} -eq 0 ]] && { echo "❌ No hay stashes." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          stash=$(printf '%s\n' "${stash_list[@]}" | gum choose --header "Selecciona stash")
+        else
+          local i=1; for s in "${stash_list[@]}"; do echo "$i) $s" >&2; ((i++)); done
+          echo -n "Número: " >&2; read -r idx; stash="${stash_list[$idx]}"
+        fi
+        [[ -z "$stash" ]] && continue
+        local stash_ref="${stash%%:*}"
+        git stash show -p "$stash_ref"
+        ;;
+      drop)
+        local stash_list nums to_delete=()
+        stash_list=(${(f)"$(git stash list 2>/dev/null)"})
+        [[ ${#stash_list[@]} -eq 0 ]] && { echo "❌ No hay stashes." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          local selection
+          selection=$(printf '%s\n' "${stash_list[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
+          [[ -z "$selection" ]] && continue
+          to_delete=(${(f)"$selection"})
+        else
+          echo -e "${C_CYAN}📦 Stashes:${C_RESET}" >&2
+          local i=1; for s in "${stash_list[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$s" >&2; ((i++)); done
+          echo -n "🗑️ Números (ej: 1 3 5) o 'all': " >&2
+          read -r -A nums
+          if [[ "${nums[1]}" == "all" ]]; then
+            to_delete=("${stash_list[@]}")
+          else
+            for num in "${nums[@]}"; do
+              [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#stash_list[@]} )) && to_delete+=("${stash_list[$num]}")
+            done
+          fi
+        fi
+        [[ ${#to_delete[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron stashes." >&2; continue; }
+        echo -e "\n${C_YELLOW}🗑️ Se borrarán ${#to_delete[@]} stashes:${C_RESET}" >&2
+        for s in "${to_delete[@]}"; do echo "  - ${s%%:*}" >&2; done
+        _confirm "¿Confirmar borrado?" || continue
+        local ok=0
+        for s in "${to_delete[@]}"; do
+          git stash drop "${s%%:*}" 2>&1 && ((ok++))
+        done
+        echo "✅ $ok stashes borrados." >&2
+        ;;
+      clear)
+        _confirm "🗑️ ¿Borrar TODOS los stashes?" || continue
+        git stash clear && echo "✅ Todos los stashes borrados." >&2
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# ↩️ RESET · Deshacer commits
+# ==============================================
+_action_reset() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "soft · deshacer commit, mantener staged (--soft)" \
+        "mixed · deshacer commit, desestagear (--mixed)" \
+        "hard · deshacer todo, perder cambios (--hard)" \
+        "to-commit · resetear a commit específico" \
+
+        --header " ↩️ RESET · Elige modo Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "↩️ RESET" >&2
+      echo "1) Soft" >&2
+      echo "2) Mixed" >&2
+      echo "3) Hard" >&2
+      echo "4) To commit" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="soft" ;; 2) choice="mixed" ;; 3) choice="hard" ;; 4) choice="to-commit" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      soft)
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(gum input --placeholder "commit (default: HEAD~1)")
+        else
+          echo -n "Commit (HEAD~1): " >&2; read -r commit
+        fi
+        git reset --soft "${commit:-HEAD~1}" && echo "✅ Reset soft a ${commit:-HEAD~1}" >&2
+        ;;
+      mixed)
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(gum input --placeholder "commit (default: HEAD~1)")
+        else
+          echo -n "Commit (HEAD~1): " >&2; read -r commit
+        fi
+        git reset --mixed "${commit:-HEAD~1}" && echo "✅ Reset mixed a ${commit:-HEAD~1}" >&2
+        ;;
+      hard)
+        _confirm "⚠️ Esto PERDERÁ todos los cambios sin commitear. ¿Continuar?" || continue
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(gum input --placeholder "commit (default: HEAD~1)")
+        else
+          echo -n "Commit (HEAD~1): " >&2; read -r commit
+        fi
+        git reset --hard "${commit:-HEAD~1}" && echo "✅ Reset hard a ${commit:-HEAD~1}" >&2
+        ;;
+      to-commit)
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(gum input --placeholder "hash o referencia del commit")
+        else
+          echo -n "Commit: " >&2; read -r commit
+        fi
+        [[ -z "$commit" ]] && continue
+        _confirm "⚠️ Resetear a '$commit'?" || continue
+        git reset "$commit" && echo "✅ Reset a $commit" >&2
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 🔄 RESTORE · Restaurar archivos
+# ==============================================
+_action_restore() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "file · restaurar archivos del working tree (lote)" \
+        "unstage · desestagear archivos (lote)" \
+        "from-branch · restaurar desde otra rama (--source)" \
+
+        --header " 🔄 RESTORE · Elige acción Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "🔄 RESTORE" >&2
+      echo "1) Restaurar archivos (lote)" >&2
+      echo "2) Desestagear (lote)" >&2
+      echo "3) Desde otra rama" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="file" ;; 2) choice="unstage" ;; 3) choice="from-branch" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      file)
+        local files nums to_restore=()
+        files=(${(f)"$(git status --porcelain 2>/dev/null | cut -c4-)"})
+        [[ ${#files[@]} -eq 0 ]] && { echo "❌ No hay archivos modificados." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          local selection
+          selection=$(printf '%s\n' "${files[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
+          [[ -z "$selection" ]] && continue
+          to_restore=(${(f)"$selection"})
+        else
+          echo -e "${C_CYAN}📄 Archivos modificados:${C_RESET}" >&2
+          local i=1; for f in "${files[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$f" >&2; ((i++)); done
+          echo -n "🔄 Números (ej: 1 3 5) o 'all': " >&2
+          read -r -A nums
+          if [[ "${nums[1]}" == "all" ]]; then
+            to_restore=("${files[@]}")
+          else
+            for num in "${nums[@]}"; do
+              [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#files[@]} )) && to_restore+=("${files[$num]}")
+            done
+          fi
+        fi
+        [[ ${#to_restore[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron archivos." >&2; continue; }
+        local ok=0
+        for f in "${to_restore[@]}"; do git restore "$f" 2>&1 && ((ok++)); done
+        echo "✅ $ok archivos restaurados." >&2
+        ;;
+      unstage)
+        local files nums to_unstage=()
+        files=(${(f)"$(git diff --cached --name-only 2>/dev/null)"})
+        [[ ${#files[@]} -eq 0 ]] && { echo "❌ No hay archivos en staging." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          local selection
+          selection=$(printf '%s\n' "${files[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
+          [[ -z "$selection" ]] && continue
+          to_unstage=(${(f)"$selection"})
+        else
+          echo -e "${C_CYAN}📄 Archivos en staging:${C_RESET}" >&2
+          local i=1; for f in "${files[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$f" >&2; ((i++)); done
+          echo -n "🔄 Números (ej: 1 3 5) o 'all': " >&2
+          read -r -A nums
+          if [[ "${nums[1]}" == "all" ]]; then
+            to_unstage=("${files[@]}")
+          else
+            for num in "${nums[@]}"; do
+              [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#files[@]} )) && to_unstage+=("${files[$num]}")
+            done
+          fi
+        fi
+        [[ ${#to_unstage[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron archivos." >&2; continue; }
+        local ok=0
+        for f in "${to_unstage[@]}"; do git restore --staged "$f" 2>&1 && ((ok++)); done
+        echo "✅ $ok archivos desestageados." >&2
+        ;;
+      from-branch)
+        local branches source files
+        branches=(${(f)"$(git branch --format='%(refname:short)')"})
+        if command -v gum &>/dev/null; then
+          source=$(printf '%s\n' "${branches[@]}" | gum choose --header "Rama fuente")
+          [[ -z "$source" ]] && continue
+          files=(${(f)"$(git diff "$source" --name-only 2>/dev/null)"})
+          [[ ${#files[@]} -eq 0 ]] && { echo "❌ No hay diferencias con '$source'." >&2; continue; }
+          local selected
+          selected=$(printf '%s\n' "${files[@]}" | gum choose --no-limit --header "Archivos a restaurar desde '$source'")
+        else
+          local i=1; for b in "${branches[@]}"; do echo "$i) $b" >&2; ((i++)); done
+          echo -n "Rama fuente (nº): " >&2; read -r idx; source="${branches[$idx]}"
+          [[ -z "$source" ]] && continue
+          echo -n "Archivo: " >&2; read -r selected
+        fi
+        [[ -z "$selected" ]] && continue
+        echo "$selected" | while read -r f; do git restore --source="$source" "$f"; done
+        echo "✅ Archivos restaurados desde '$source'." >&2
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 🔀 REBASE · Rebase interactivo
+# ==============================================
+_action_rebase() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "onto · rebase onto otra rama" \
+        "interactive · rebase interactivo (-i)" \
+        "abort · abortar rebase en curso" \
+        "continue · continuar rebase" \
+        "skip · saltar commit conflictivo" \
+
+        --header " 🔀 REBASE · Elige acción Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "🔀 REBASE" >&2
+      echo "1) Onto rama" >&2
+      echo "2) Interactivo (-i)" >&2
+      echo "3) Abort" >&2
+      echo "4) Continue" >&2
+      echo "5) Skip" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="onto" ;; 2) choice="interactive" ;; 3) choice="abort" ;;
+        4) choice="continue" ;; 5) choice="skip" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      onto)
+        local branches target
+        branches=(${(f)"$(git branch --format='%(refname:short)')"})
+        if command -v gum &>/dev/null; then
+          target=$(printf '%s\n' "${branches[@]}" | gum choose --header "Rebase onto rama")
+        else
+          local i=1; for b in "${branches[@]}"; do echo "$i) $b" >&2; ((i++)); done
+          echo -n "Rama (nº): " >&2; read -r idx; target="${branches[$idx]}"
+        fi
+        [[ -z "$target" ]] && continue
+        git rebase "$target" && echo "✅ Rebase onto '$target' completado." >&2
+        ;;
+      interactive)
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(gum input --placeholder "commit base (ej: HEAD~5)")
+        else
+          echo -n "Commit base: " >&2; read -r commit
+        fi
+        [[ -z "$commit" ]] && continue
+        git rebase -i "$commit"
+        ;;
+      abort)
+        git rebase --abort && echo "✅ Rebase abortado." >&2
+        ;;
+      continue)
+        git rebase --continue
+        ;;
+      skip)
+        git rebase --skip && echo "✅ Commit saltado." >&2
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 🔀 CHECKOUT · Cambiar rama o archivo
+# ==============================================
+_action_checkout() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "branch · cambiar de rama" \
+        "create · crear y cambiar a nueva rama (-b)" \
+        "file · restaurar archivos desde HEAD (lote)" \
+        "detach · detach HEAD en commit" \
+
+        --header " 🔀 CHECKOUT · Elige acción Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "🔀 CHECKOUT" >&2
+      echo "1) Cambiar rama" >&2
+      echo "2) Crear + cambiar (-b)" >&2
+      echo "3) Restaurar archivos (lote)" >&2
+      echo "4) Detach HEAD" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="branch" ;; 2) choice="create" ;; 3) choice="file" ;; 4) choice="detach" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      branch)
+        local branches target
+        branches=(${(f)"$(git branch --format='%(refname:short)')"})
+        if command -v gum &>/dev/null; then
+          target=$(printf '%s\n' "${branches[@]}" | gum choose --header "Selecciona rama")
+        else
+          local i=1; for b in "${branches[@]}"; do echo "$i) $b" >&2; ((i++)); done
+          echo -n "Rama (nº): " >&2; read -r idx; target="${branches[$idx]}"
+        fi
+        [[ -z "$target" ]] && continue
+        git checkout "$target"
+        ;;
+      create)
+        local name
+        if command -v gum &>/dev/null; then
+          name=$(gum input --placeholder "nombre-de-la-nueva-rama")
+        else
+          echo -n "Nombre: " >&2; read -r name
+        fi
+        [[ -z "$name" ]] && continue
+        git checkout -b "$name" && echo "✅ Creada y cambiado a '$name'." >&2
+        ;;
+      file)
+        local files nums to_restore=()
+        files=(${(f)"$(git status --porcelain 2>/dev/null | cut -c4-)"})
+        [[ ${#files[@]} -eq 0 ]] && { echo "❌ No hay archivos modificados." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          local selection
+          selection=$(printf '%s\n' "${files[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
+          [[ -z "$selection" ]] && continue
+          to_restore=(${(f)"$selection"})
+        else
+          echo -e "${C_CYAN}📄 Archivos modificados:${C_RESET}" >&2
+          local i=1; for f in "${files[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$f" >&2; ((i++)); done
+          echo -n "🔄 Números (ej: 1 3 5) o 'all': " >&2
+          read -r -A nums
+          if [[ "${nums[1]}" == "all" ]]; then
+            to_restore=("${files[@]}")
+          else
+            for num in "${nums[@]}"; do
+              [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#files[@]} )) && to_restore+=("${files[$num]}")
+            done
+          fi
+        fi
+        [[ ${#to_restore[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron archivos." >&2; continue; }
+        local ok=0
+        for f in "${to_restore[@]}"; do git checkout -- "$f" 2>&1 && ((ok++)); done
+        echo "✅ $ok archivos restaurados." >&2
+        ;;
+      detach)
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(gum input --placeholder "commit hash o referencia")
+        else
+          echo -n "Commit: " >&2; read -r commit
+        fi
+        [[ -z "$commit" ]] && continue
+        git checkout "$commit"
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# ⬇️ PULL · Traer y fusionar
+# ==============================================
+_action_pull() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "default · pull normal" \
+        "rebase · pull con rebase (--rebase)" \
+        "ff-only · solo fast-forward (--ff-only)" \
+        "prune · pull + limpiar refs obsoletos (--prune)" \
+        "all · pull todos los remotos (--all)" \
+
+        --header " ⬇️ PULL · Elige modo Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "⬇️ PULL" >&2
+      echo "1) Default" >&2
+      echo "2) Rebase" >&2
+      echo "3) FF-only" >&2
+      echo "4) Prune" >&2
+      echo "5) All remotes" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="default" ;; 2) choice="rebase" ;; 3) choice="ff-only" ;;
+        4) choice="prune" ;; 5) choice="all" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      default)  git pull ;;
+      rebase)   git pull --rebase ;;
+      ff-only)  git pull --ff-only ;;
+      prune)    git pull --prune ;;
+      all)      git pull --all ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 📥 FETCH · Traer cambios remotos
+# ==============================================
+_action_fetch() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "default · fetch origin" \
+        "all · fetch todos los remotos (--all)" \
+        "prune · fetch + limpiar refs obsoletas (--prune)" \
+        "tags · fetch todas las tags (--tags)" \
+        "remote · fetch remoto específico" \
+
+        --header " 📥 FETCH · Elige modo Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "📥 FETCH" >&2
+      echo "1) Default (origin)" >&2
+      echo "2) All remotes" >&2
+      echo "3) Prune" >&2
+      echo "4) Tags" >&2
+      echo "5) Remoto específico" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="default" ;; 2) choice="all" ;; 3) choice="prune" ;;
+        4) choice="tags" ;; 5) choice="remote" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      default)  git fetch ;;
+      all)      git fetch --all ;;
+      prune)    git fetch --prune ;;
+      tags)     git fetch --tags ;;
+      remote)
+        local remotes remote
+        remotes=(${(f)"$(git remote 2>/dev/null)"})
+        [[ ${#remotes[@]} -eq 0 ]] && { echo "❌ No hay remotos configurados." >&2; continue; }
+        if command -v gum &>/dev/null; then
+          remote=$(printf '%s\n' "${remotes[@]}" | gum choose --header "Selecciona remoto")
+        else
+          local i=1; for r in "${remotes[@]}"; do echo "$i) $r" >&2; ((i++)); done
+          echo -n "Remoto (nº): " >&2; read -r idx; remote="${remotes[$idx]}"
+        fi
+        [[ -z "$remote" ]] && continue
+        git fetch "$remote"
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 👁️ SHOW · Ver un commit
+# ==============================================
+_action_show() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "latest · ver último commit" \
+        "pick · elegir commit del historial" \
+        "hash · introducir hash manualmente" \
+        "stat · último commit con stat" \
+        "files · solo nombres de archivos (--name-only)" \
+
+        --header " 👁️ SHOW · Elige opción Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "👁️ SHOW" >&2
+      echo "1) Último commit" >&2
+      echo "2) Elegir del historial" >&2
+      echo "3) Hash manual" >&2
+      echo "4) Último + stat" >&2
+      echo "5) Solo archivos" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="latest" ;; 2) choice="pick" ;; 3) choice="hash" ;;
+        4) choice="stat" ;; 5) choice="files" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      latest)  git show ;;
+      pick)
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(git log --oneline -20 | gum choose --header "Selecciona commit" | awk '{print $1}')
+        else
+          git log --oneline -20 >&2
+          echo -n "Hash: " >&2; read -r commit
+        fi
+        [[ -z "$commit" ]] && continue
+        git show "$commit"
+        ;;
+      hash)
+        local commit
+        if command -v gum &>/dev/null; then
+          commit=$(gum input --placeholder "hash del commit")
+        else
+          echo -n "Hash: " >&2; read -r commit
+        fi
+        [[ -z "$commit" ]] && continue
+        git show "$commit"
+        ;;
+      stat)   git show --stat ;;
+      files)  git show --name-only ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
+# 🔄 SYNC · Sincronizar con remoto
+# ==============================================
+_action_sync() {
+  _git_check_repo || return 1
+  while true; do
+    local choice
+    if command -v gum &>/dev/null; then
+      choice=$(gum choose \
+        "default · remote update + pull --rebase" \
+        "fetch-all · fetch all + pull --rebase" \
+        "prune · fetch --prune + pull --rebase" \
+
+        --header " 🔄 SYNC · Elige modo Esc=salir ")
+      [[ -z "$choice" ]] && return 0
+      choice="${choice%% · *}"
+    else
+      echo "" >&2
+      echo "🔄 SYNC" >&2
+      echo "1) Default (remote update + pull --rebase)" >&2
+      echo "2) Fetch all + pull --rebase" >&2
+      echo "3) Prune + pull --rebase" >&2
+      echo "q) Salir" >&2
+      echo -n "Opción: " >&2; read -r choice
+      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
+      case "$choice" in
+        1) choice="default" ;; 2) choice="fetch-all" ;; 3) choice="prune" ;;
+        *) continue ;;
+      esac
+    fi
+
+    case "$choice" in
+      default)
+        git remote update && git pull --rebase
+        ;;
+      fetch-all)
+        git fetch --all && git pull --rebase
+        ;;
+      prune)
+        git fetch --prune && git pull --rebase
+        ;;
+    esac
+    echo "" >&2
+  done
+}
+
+# ==============================================
 # 🎯 DISPATCHER PRINCIPAL
 # ==============================================
 function on_git() {
@@ -1158,27 +2184,27 @@ function on_git() {
       opt=$(gum choose \
         "push · commit + push automático" \
         "commit · solo commit local" \
-        "release · commit + push + tag SemVer" \
-        "merge · merge entre ramas" \
-        "switch · cambiar de rama" \
-        "flow · menú interactivo" \
-        "clean · limpiar innecesarios" \
-        "submodule · gestionar submódulos" \
-        "remote · configurar remotos" \
-        "tag · menú de tags y releases" \
-        "branch · listar/crear ramas" \
-        "log · historial" \
-        "stash · cambios guardados" \
-        "status · estado del repo" \
-        "reset · deshacer commits" \
-        "restore · restaurar staged" \
-        "diff · diferencias" \
-        "fetch · traer cambios" \
-        "checkout · cambiar rama o archivo" \
-        "pull · traer y fusionar" \
-        "rebase · rebase" \
-        "show · ver un commit" \
-        "sync · remote update + pull --rebase" \
+        "release · tag SemVer + GitHub release (CRUD)" \
+        "merge · merge entre ramas (--strategy=ours|theirs)" \
+        "switch · cambiar de rama (auto-stash)" \
+        "flow · menú interactivo rápido" \
+        "clean · limpiar innecesarios (node_modules, dist…)" \
+        "submodule · add/delete/fix submódulos" \
+        "remote · configurar remotos (SSH/gh)" \
+        "tag · menú de tags (create/list/delete/rename/edit)" \
+        "branch · list/create/delete local/delete remoto/rename" \
+        "status · short (-sb) / long / porcelain / ignored" \
+        "log · graph / full / stat / author / last N" \
+        "diff · working / staged / stat / branches" \
+        "stash · push/list/pop/apply/show/drop/clear" \
+        "reset · soft / mixed / hard / to-commit" \
+        "restore · file / unstage / from-branch" \
+        "rebase · onto / interactive (-i) / abort / continue / skip" \
+        "checkout · branch / create (-b) / file / detach" \
+        "pull · default / rebase / ff-only / prune / all" \
+        "fetch · default / all / prune / tags / remoto" \
+        "show · latest / pick / hash / stat / files" \
+        "sync · remote update / fetch all / prune + rebase" \
         --header " 🔀 GIT · Elige subcomando ")
       [[ -z "$opt" ]] && return 0
       on_git "${opt%% · *}"
@@ -1207,19 +2233,19 @@ function on_git() {
     submodule|sub) _action_submodule "$@" ;;
     remote|rem)  _action_remote "$@" ;;
     t|tag)       if [[ $# -gt 0 ]]; then command git tag "$@"; else _tag_menu; fi ;;
-    s|status)    command git status "$@" ;;
-    b|branch)    command git branch "$@" ;;
-    l|log)       command git log --oneline --decorate --graph "$@" ;;
-    d|diff)      command git diff "$@" ;;
-    ft|fetch)    command git fetch "$@" ;;
-    co|checkout) command git checkout "$@" ;;
-    pl|pull)     command git pull "$@" ;;
-    sta|stash)   command git stash "$@" ;;
-    rs|reset)    command git reset "$@" ;;
-    restore)     command git restore "$@" ;;
-    rb|rebase)   command git rebase "$@" ;;
-    show)        command git show "$@" ;;
-    sync)        command git remote update && command git pull --rebase ;;
+    s|status)    if [[ $# -gt 0 ]]; then command git status "$@"; else _action_status; fi ;;
+    b|branch)    if [[ $# -gt 0 ]]; then command git branch "$@"; else _action_branch; fi ;;
+    l|log)       if [[ $# -gt 0 ]]; then command git log "$@"; else _action_log; fi ;;
+    d|diff)      if [[ $# -gt 0 ]]; then command git diff "$@"; else _action_diff; fi ;;
+    ft|fetch)    if [[ $# -gt 0 ]]; then command git fetch "$@"; else _action_fetch; fi ;;
+    co|checkout) if [[ $# -gt 0 ]]; then command git checkout "$@"; else _action_checkout; fi ;;
+    pl|pull)     if [[ $# -gt 0 ]]; then command git pull "$@"; else _action_pull; fi ;;
+    sta|stash)   if [[ $# -gt 0 ]]; then command git stash "$@"; else _action_stash; fi ;;
+    rs|reset)    if [[ $# -gt 0 ]]; then command git reset "$@"; else _action_reset; fi ;;
+    restore)     if [[ $# -gt 0 ]]; then command git restore "$@"; else _action_restore; fi ;;
+    rb|rebase)   if [[ $# -gt 0 ]]; then command git rebase "$@"; else _action_rebase; fi ;;
+    show)        if [[ $# -gt 0 ]]; then command git show "$@"; else _action_show; fi ;;
+    sync)        if [[ $# -gt 0 ]]; then command git remote update && command git pull --rebase "$@"; else _action_sync; fi ;;
     help|-h|--help) _show_help ;;
     *)
       echo -e "${C_RED}❌ Subcomando desconocido: $cmd${C_RESET}" >&2
