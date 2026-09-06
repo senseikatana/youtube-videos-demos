@@ -81,14 +81,13 @@ git clone https://github.com/TU-USUARIO/zsh-dojo.git
 En tu `~/.zshrc`:
 
 ```zsh
-# Aliases (los que uses)
+# Aliases (los que uses — la lista completa está en la descripción del vídeo)
 alias useGit='on_git'
 alias useFiles='on_files'
 alias usePkg='on_pkg'
-# ...ver .zshrc de este repo para la lista completa
 
-# Cargar los módulos
-[[ -f ~/ruta/a/zsh-dojo/functions.zsh ]] && source ~/ruta/a/zsh-dojo/functions.zsh
+# Cargar los módulos (el cargador detecta su propia carpeta)
+source ~/ruta/a/zsh-dojo/functions.zsh
 ```
 
 Recarga con `source ~/.zshrc` y listo. Cada módulo es independiente: copia solo los que uses.
