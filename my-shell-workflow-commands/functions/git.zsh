@@ -1250,6 +1250,7 @@ _action_branch() {
         local remotes nums to_delete=()
         remotes=(${(f)"$(git branch -r --format='%(refname:short)' 2>/dev/null | grep -v 'HEAD')"})
         [[ ${#remotes[@]} -eq 0 ]] && { echo "❌ No hay ramas remotas." >&2; continue; }
+<<<<<<< HEAD
         if command -v gum &>/dev/null; then
           local selection
           selection=$(printf '%s\n' "${remotes[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
@@ -1267,6 +1268,18 @@ _action_branch() {
               [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#remotes[@]} )) && to_delete+=("${remotes[$num]}")
             done
           fi
+=======
+        echo -e "${C_CYAN}🌿 Ramas remotas:${C_RESET}" >&2
+        local i=1; for r in "${remotes[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$r" >&2; ((i++)); done
+        echo -n "🗑️ Números (ej: 1 3 5) o 'all': " >&2
+        read -r -A nums
+        if [[ "${nums[1]}" == "all" ]]; then
+          to_delete=("${remotes[@]}")
+        else
+          for num in "${nums[@]}"; do
+            [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#remotes[@]} )) && to_delete+=("${remotes[$num]}")
+          done
+>>>>>>> dev
         fi
         [[ ${#to_delete[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron ramas." >&2; continue; }
         echo -e "\n${C_YELLOW}🗑️ Se borrarán ${#to_delete[@]} ramas remotas:${C_RESET}" >&2
@@ -1278,6 +1291,10 @@ _action_branch() {
           echo "  → git push $remote :$branch" >&2
           if git push "$remote" ":$branch" 2>&1; then ((ok++)); else ((fail++)); fi
         done
+<<<<<<< HEAD
+=======
+        git fetch --prune 2>/dev/null
+>>>>>>> dev
         echo "✅ $ok borradas remotamente, $fail fallidas." >&2
         ;;
       rename)
@@ -1301,6 +1318,7 @@ _action_branch() {
 }
 
 # ==============================================
+<<<<<<< HEAD
 # 📊 STATUS · Estado del repo
 # ==============================================
 _action_status() {
@@ -1409,6 +1427,8 @@ _action_log() {
 }
 
 # ==============================================
+=======
+>>>>>>> dev
 # 🔍 DIFF · Diferencias
 # ==============================================
 _action_diff() {
@@ -2193,8 +2213,11 @@ function on_git() {
         "remote · configurar remotos (SSH/gh)" \
         "tag · menú de tags (create/list/delete/rename/edit)" \
         "branch · list/create/delete local/delete remoto/rename" \
+<<<<<<< HEAD
         "status · short (-sb) / long / porcelain / ignored" \
         "log · graph / full / stat / author / last N" \
+=======
+>>>>>>> dev
         "diff · working / staged / stat / branches" \
         "stash · push/list/pop/apply/show/drop/clear" \
         "reset · soft / mixed / hard / to-commit" \
@@ -2233,9 +2256,15 @@ function on_git() {
     submodule|sub) _action_submodule "$@" ;;
     remote|rem)  _action_remote "$@" ;;
     t|tag)       if [[ $# -gt 0 ]]; then command git tag "$@"; else _tag_menu; fi ;;
+<<<<<<< HEAD
     s|status)    if [[ $# -gt 0 ]]; then command git status "$@"; else _action_status; fi ;;
     b|branch)    if [[ $# -gt 0 ]]; then command git branch "$@"; else _action_branch; fi ;;
     l|log)       if [[ $# -gt 0 ]]; then command git log "$@"; else _action_log; fi ;;
+=======
+    s|status)    command git status "$@" ;;
+    b|branch)    _action_branch "$@" ;;
+    l|log)       command git log --oneline --decorate --graph "$@" ;;
+>>>>>>> dev
     d|diff)      if [[ $# -gt 0 ]]; then command git diff "$@"; else _action_diff; fi ;;
     ft|fetch)    if [[ $# -gt 0 ]]; then command git fetch "$@"; else _action_fetch; fi ;;
     co|checkout) if [[ $# -gt 0 ]]; then command git checkout "$@"; else _action_checkout; fi ;;
@@ -2254,4 +2283,3 @@ function on_git() {
       ;;
   esac
 }
-
