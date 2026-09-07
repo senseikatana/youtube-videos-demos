@@ -1270,8 +1270,8 @@ _action_branch() {
         local ok=0 fail=0
         for r in "${to_delete[@]}"; do
           local remote="${r%%/*}" branch="${r#*/}"
-          echo "  → git push --delete $remote $branch" >&2
-          if git push --delete "$remote" "$branch" 2>&1; then ((ok++)); else ((fail++)); fi
+          echo "  → git push $remote :$branch" >&2
+          if git push "$remote" ":$branch" 2>&1; then ((ok++)); else ((fail++)); fi
         done
         git fetch --prune 2>/dev/null
         echo "✅ $ok borradas remotamente, $fail fallidas." >&2
