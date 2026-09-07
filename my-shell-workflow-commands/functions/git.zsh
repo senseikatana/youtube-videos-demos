@@ -80,10 +80,12 @@ _show_help() {
   remote, rem    Configurar remotos (SSH/gh)
   tag, t         Menú de tags (create/list/delete/rename/edit)
 
- ${C_YELLOW}Submenús interactivos (sin args = gum menu, con args = passthrough):${C_RESET}
+ ${C_YELLOW}Passthrough directo:${C_RESET}
+  status, s      git status
+  log, l         git log --oneline --decorate --graph
+
+ ${C_YELLOW}Submenús interactivos:${C_RESET}
   branch, b      list / list-all (-a) / create / delete-local / delete-remote / rename
-  status, s      short (-sb) / long / porcelain / ignored
-  log, l         graph / full / stat / author / last N
   diff, d        working / staged / stat / compact / branches
   stash, sta     push / list / pop / apply / show / drop / clear
   reset, rs      soft / mixed / hard / to-commit
@@ -1250,23 +1252,16 @@ _action_branch() {
         local remotes nums to_delete=()
         remotes=(${(f)"$(git branch -r --format='%(refname:short)' 2>/dev/null | grep -v 'HEAD')"})
         [[ ${#remotes[@]} -eq 0 ]] && { echo "❌ No hay ramas remotas." >&2; continue; }
-        if command -v gum &>/dev/null; then
-          local selection
-          selection=$(printf '%s\n' "${remotes[@]}" | gum choose --no-limit --header "Space=marcar, Enter=confirmar, Esc=volver")
-          [[ -z "$selection" ]] && continue
-          to_delete=(${(f)"$selection"})
+        echo -e "${C_CYAN}🌿 Ramas remotas:${C_RESET}" >&2
+        local i=1; for r in "${remotes[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$r" >&2; ((i++)); done
+        echo -n "🗑️ Números (ej: 1 3 5) o 'all': " >&2
+        read -r -A nums
+        if [[ "${nums[1]}" == "all" ]]; then
+          to_delete=("${remotes[@]}")
         else
-          echo -e "${C_CYAN}🌿 Ramas remotas:${C_RESET}" >&2
-          local i=1; for r in "${remotes[@]}"; do printf "  ${C_GREEN}[%d]${C_RESET} %s\n" "$i" "$r" >&2; ((i++)); done
-          echo -n "🗑️ Números (ej: 1 3 5) o 'all': " >&2
-          read -r -A nums
-          if [[ "${nums[1]}" == "all" ]]; then
-            to_delete=("${remotes[@]}")
-          else
-            for num in "${nums[@]}"; do
-              [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#remotes[@]} )) && to_delete+=("${remotes[$num]}")
-            done
-          fi
+          for num in "${nums[@]}"; do
+            [[ "$num" =~ ^[0-9]+$ ]] && (( num >= 1 && num <= ${#remotes[@]} )) && to_delete+=("${remotes[$num]}")
+          done
         fi
         [[ ${#to_delete[@]} -eq 0 ]] && { echo "⚠️ No se seleccionaron ramas." >&2; continue; }
         echo -e "\n${C_YELLOW}🗑️ Se borrarán ${#to_delete[@]} ramas remotas:${C_RESET}" >&2
@@ -1275,9 +1270,10 @@ _action_branch() {
         local ok=0 fail=0
         for r in "${to_delete[@]}"; do
           local remote="${r%%/*}" branch="${r#*/}"
-          echo "  → git push $remote :$branch" >&2
-          if git push "$remote" ":$branch" 2>&1; then ((ok++)); else ((fail++)); fi
+          echo "  → git push --delete $remote $branch" >&2
+          if git push --delete "$remote" "$branch" 2>&1; then ((ok++)); else ((fail++)); fi
         done
+        git fetch --prune 2>/dev/null
         echo "✅ $ok borradas remotamente, $fail fallidas." >&2
         ;;
       rename)
@@ -1294,114 +1290,6 @@ _action_branch() {
         fi
         [[ -z "$new_name" ]] && continue
         git branch -m "$old_name" "$new_name" && echo "✅ '$old_name' → '$new_name'" >&2
-        ;;
-    esac
-    echo "" >&2
-  done
-}
-
-# ==============================================
-# 📊 STATUS · Estado del repo
-# ==============================================
-_action_status() {
-  _git_check_repo || return 1
-  while true; do
-    local choice
-    if command -v gum &>/dev/null; then
-      choice=$(gum choose \
-        "short · formato corto (-sb)" \
-        "long · formato completo" \
-        "porcelain · porcelain machine-readable" \
-        "ignored · mostrar ignorados (--ignored)" \
-
-        --header " 📊 STATUS · Elige formato Esc=salir ")
-      [[ -z "$choice" ]] && return 0
-      choice="${choice%% · *}"
-    else
-      echo "" >&2
-      echo "📊 STATUS" >&2
-      echo "1) Formato corto (-sb)" >&2
-      echo "2) Formato completo" >&2
-      echo "3) Porcelain" >&2
-      echo "4) Ignorados" >&2
-      echo "q) Salir" >&2
-      echo -n "Opción: " >&2; read -r choice
-      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
-      case "$choice" in
-        1) choice="short" ;; 2) choice="long" ;; 3) choice="porcelain" ;; 4) choice="ignored" ;;
-        *) continue ;;
-      esac
-    fi
-
-    case "$choice" in
-      short)    git status -sb ;;
-      long)     git status ;;
-      porcelain) git status --porcelain ;;
-      ignored)  git status --ignored ;;
-    esac
-    echo "" >&2
-  done
-}
-
-# ==============================================
-# 📜 LOG · Historial de commits
-# ==============================================
-_action_log() {
-  _git_check_repo || return 1
-  while true; do
-    local choice
-    if command -v gum &>/dev/null; then
-      choice=$(gum choose \
-        "graph · oneline + grafo decorado" \
-        "full · log completo" \
-        "stat · con estadísticas de cambios" \
-        "author · filtrar por autor" \
-        "last · últimos N commits" \
-
-        --header " 📜 LOG · Elige formato Esc=salir ")
-      [[ -z "$choice" ]] && return 0
-      choice="${choice%% · *}"
-    else
-      echo "" >&2
-      echo "📜 LOG" >&2
-      echo "1) Oneline graph" >&2
-      echo "2) Log completo" >&2
-      echo "3) Con estadísticas" >&2
-      echo "4) Por autor" >&2
-      echo "5) Últimos N" >&2
-      echo "q) Salir" >&2
-      echo -n "Opción: " >&2; read -r choice
-      [[ "$choice" == "q" || "$choice" == "Q" ]] && return 0
-      case "$choice" in
-        1) choice="graph" ;; 2) choice="full" ;; 3) choice="stat" ;;
-        4) choice="author" ;; 5) choice="last" ;;
-        *) continue ;;
-      esac
-    fi
-
-    case "$choice" in
-      graph)  git log --oneline --decorate --graph ;;
-      full)   git log ;;
-      stat)   git log --stat ;;
-      author)
-        local author
-        if command -v gum &>/dev/null; then
-          author=$(gum input --placeholder "nombre o email del autor")
-        else
-          echo -n "Autor: " >&2; read -r author
-        fi
-        [[ -z "$author" ]] && continue
-        git log --oneline --author="$author"
-        ;;
-      last)
-        local n
-        if command -v gum &>/dev/null; then
-          n=$(gum input --placeholder "número de commits (ej: 10)")
-        else
-          echo -n "Nº commits: " >&2; read -r n
-        fi
-        [[ -z "$n" ]] && continue
-        git log --oneline -n "$n"
         ;;
     esac
     echo "" >&2
@@ -2193,8 +2081,6 @@ function on_git() {
         "remote · configurar remotos (SSH/gh)" \
         "tag · menú de tags (create/list/delete/rename/edit)" \
         "branch · list/create/delete local/delete remoto/rename" \
-        "status · short (-sb) / long / porcelain / ignored" \
-        "log · graph / full / stat / author / last N" \
         "diff · working / staged / stat / branches" \
         "stash · push/list/pop/apply/show/drop/clear" \
         "reset · soft / mixed / hard / to-commit" \
@@ -2233,9 +2119,9 @@ function on_git() {
     submodule|sub) _action_submodule "$@" ;;
     remote|rem)  _action_remote "$@" ;;
     t|tag)       if [[ $# -gt 0 ]]; then command git tag "$@"; else _tag_menu; fi ;;
-    s|status)    if [[ $# -gt 0 ]]; then command git status "$@"; else _action_status; fi ;;
-    b|branch)    if [[ $# -gt 0 ]]; then command git branch "$@"; else _action_branch; fi ;;
-    l|log)       if [[ $# -gt 0 ]]; then command git log "$@"; else _action_log; fi ;;
+    s|status)    command git status "$@" ;;
+    b|branch)    _action_branch "$@" ;;
+    l|log)       command git log --oneline --decorate --graph "$@" ;;
     d|diff)      if [[ $# -gt 0 ]]; then command git diff "$@"; else _action_diff; fi ;;
     ft|fetch)    if [[ $# -gt 0 ]]; then command git fetch "$@"; else _action_fetch; fi ;;
     co|checkout) if [[ $# -gt 0 ]]; then command git checkout "$@"; else _action_checkout; fi ;;
