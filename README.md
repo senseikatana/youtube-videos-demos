@@ -25,7 +25,6 @@ Nada de "esto lo dejamos como ejercicio": lo que ves en pantalla es lo que puede
 | Proyecto | Tema | Vídeo | Estado |
 |---|---|---|---|
 | [`workflow-zsh-linux/`](workflow-zsh-linux/) | Zsh Dojo — terminal con menús interactivos | *(pendiente)* | 🎥 En producción |
-| `placeholder-futuro/` | — | — | 📝 En idea |
 
 > Cada proyecto se añade aquí al empezar su guion y se marca: 📝 idea → 🎥 en producción → ✅ publicado.
 
