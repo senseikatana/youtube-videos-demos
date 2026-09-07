@@ -6,7 +6,7 @@ description: Workflows, terminal y desarrollo — cada vídeo con su código.
 topics: [zsh, linux, dotfiles, terminal, productividad]
 ---
 
-# 🎬 Senseikatana
+# Youtube Senseikatana Channel
 
 > **Código, terminal y workflows — cada vídeo con su repo.**
 
