@@ -44,5 +44,3 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# Other unneeded files to final user:
-guion-bosquejo-video.md
