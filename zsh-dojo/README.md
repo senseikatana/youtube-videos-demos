@@ -1,6 +1,6 @@
 # 🥋 Zsh Dojo — Workflow modular de terminal
 
-> Un `.zshrc` organizado en **módulos por dominio** con **funciones-dispatcher** que abren **menús interactivos** (`gum`) para hacerlo todo en 1 o 2 pasos: git, archivos, paquetes, updates, navegación y más. En Arch/BigLinux y también Debian/Ubuntu.
+> Un `.zshrc` organizado en **módulos por dominio** con **funciones-dispatcher** que abren **menús interactivos** (`gum`) para hacerlo todo en 1 o 2 pasos: git, archivos, paquetes, updates, navegación y más. En Arch/BigLinux y también Debian/Ubuntu. Pensado para correr en cualquier terminal — en el vídeo, sobre **Wave Terminal** (blocks, paneles y atajos), con zsh + p10k + gum dentro.
 
 🎬 *[Video explicando el workflow](URL-DEL-VIDEO)* — si llegaste desde YouTube, ¡bienvenido!
 
@@ -16,7 +16,8 @@
 
 ```
 .
-├── .zshrc                  # aliases por categorías (Calling functions / Commands)
+├── .zshrc                  # env, zinit, integraciones (sourcea aliases.zsh + functions.zsh)
+├── aliases.zsh             # fuente única de aliases
 ├── functions.zsh           # cargador: registra y sourcea los módulos
 └── functions/
     ├── core.zsh            # colores y helpers (confirmaciones gum, check repo)
@@ -69,6 +70,7 @@
 - **zsh** (probado con 5.9)
 - **gum** — los menús (opcional: hay fallback numérico) · [charm.sh/gum](https://github.com/charmbracelet/gum)
 - **fzf** — selección de archivos
+- **Wave Terminal** — terminal usada en el vídeo (blocks/paneles); opcional, el config funciona en cualquier otra ([waveterm.com](https://www.waveterm.com))
 - Recomendados: `eza`, `bat`, `fd`, `duf`, `dust`, `trash-cli`, `yt-dlp`
 - En Arch: `paru` o `yay` · En Debian/Ubuntu: `apt`
 
@@ -85,6 +87,9 @@ En tu `~/.zshrc`:
 alias useGit='on_git'
 alias useFiles='on_files'
 alias usePkg='on_pkg'
+
+# O mejor: fuente única
+source ~/ruta/a/zsh-dojo/aliases.zsh
 
 # Cargar los módulos (el cargador detecta su propia carpeta)
 source ~/ruta/a/zsh-dojo/functions.zsh

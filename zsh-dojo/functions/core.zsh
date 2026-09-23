@@ -52,20 +52,6 @@ _show_help() {
 }
 
 
-# ==============================================
-# 💾 SYNC
-# ==============================================
-sync-zsh() {
-    local src="$HOME/.zsh"
-    local dst="$HOME/Proyectos/snippets-codes-vault/05_shell_configs/.zsh"
-    local vault="$HOME/Proyectos/snippets-codes-vault"
-
-    rsync -av --delete --exclude='.zcode' "$src/" "$dst/"
-
-    (cd "$vault" && git add . && git commit -m "chore: sync .zsh configs" && git push)
-}
-
-
 
 
 
