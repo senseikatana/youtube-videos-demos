@@ -87,7 +87,7 @@ on_virtmanager() {
                 return 1
             fi
             print -P "${C_GREEN}🚀 Creating and launching VM in one step...${C_RESET}"
-            virtmanager create "$file" "$size" && virtmanager run "$ram" "$cpus" "$file" "$iso"
+            on_virtmanager create "$file" "$size" && on_virtmanager run "$ram" "$cpus" "$file" "$iso"
             ;;
         list)
             print -P "${C_CYAN}📂 Available VM images:${C_RESET}"

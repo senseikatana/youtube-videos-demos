@@ -154,12 +154,12 @@ on_pm() {
         npm|pnpm|yarn|bun) pm="$1"; shift ;;
         -h|--help|help)    _pm_help; return 0 ;;
         "")
-            if command -v gum &>/dev/null; then
+            # Detectar por lockfile primero; solo preguntar si no hay match
+            if pm=$(_pm_detect); then
+                :
+            else
                 pm=$(_pm_pick)
                 [[ -z "$pm" ]] && return 0
-            else
-                pm=$(_pm_detect) || pm=$(_pm_pick)
-                [[ -z "$pm" ]] && { echo "${C_RED}❌ Sin gestor no hay nada que hacer${C_RESET}"; return 1; }
             fi
             ;;
         *) pm="" ;;

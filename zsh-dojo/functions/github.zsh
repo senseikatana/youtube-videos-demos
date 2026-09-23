@@ -12,7 +12,13 @@
 _gh_check() {
     if ! command -v gh &>/dev/null; then
         echo "${C_RED}❌ Error: GitHub CLI (gh) no está instalado.${C_RESET}"
-        echo "📦 Instala con: ${C_YELLOW}sudo pacman -S github-cli${C_RESET}"
+        if command -v pacman &>/dev/null; then
+            echo "📦 Instala con: ${C_YELLOW}sudo pacman -S github-cli${C_RESET}"
+        elif command -v apt &>/dev/null; then
+            echo "📦 Instala con: ${C_YELLOW}sudo apt install gh${C_RESET}"
+        else
+            echo "📦 Descargas: ${C_YELLOW}https://cli.github.com/${C_RESET}"
+        fi
         return 1
     fi
     return 0

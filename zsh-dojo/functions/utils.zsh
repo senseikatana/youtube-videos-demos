@@ -284,7 +284,11 @@ on_info() {
     echo ""
     
     echo "${C_YELLOW}📦 Packages:${C_RESET}"
-    echo "  Pacman: $(pacman -Qq 2>/dev/null | wc -l) packages"
+    if command -v pacman &>/dev/null; then
+        echo "  Pacman: $(pacman -Qq 2>/dev/null | wc -l) packages"
+    elif command -v dpkg-query &>/dev/null; then
+        echo "  dpkg: $(dpkg-query -W -f='${binary:Package}\n' 2>/dev/null | wc -l) packages"
+    fi
     command -v flatpak &>/dev/null && echo "  Flatpak: $(flatpak list --app 2>/dev/null | wc -l) apps"
 }
 
@@ -332,11 +336,18 @@ on_cleanup() {
     case "$choice" in
         1) _cleanup_pkg_cache ;;
         2) sudo journalctl --vacuum-time=3d ;;
-        3) sudo rm -rf /tmp/* ;;
-        4) rm -rf ~/.local/share/Trash/* ;;
+        3)
+            _git_ask_yes_no "¿Borrar /tmp/* (sudo rm -rf)?" || { echo "⏭️ Cancelado."; return 0; }
+            sudo rm -rf /tmp/*
+            ;;
+        4)
+            _git_ask_yes_no "¿Vaciar la papelera (~/.local/share/Trash)?" || { echo "⏭️ Cancelado."; return 0; }
+            rm -rf ~/.local/share/Trash/*
+            ;;
         5)
             _cleanup_pkg_cache
             sudo journalctl --vacuum-time=3d
+            _git_ask_yes_no "¿Borrar /tmp/* y vaciar la papelera?" || { echo "⏭️ Cancelado."; return 0; }
             sudo rm -rf /tmp/*
             rm -rf ~/.local/share/Trash/*
             echo "${C_GREEN}✅ Todo limpio!${C_RESET}"

@@ -49,8 +49,9 @@ _nmk_rm() {
     echo "$found"
     if _git_ask_yes_no "¿Confirmas la eliminación?"; then
         local -a targets
-        targets=("${(f)$(echo "$found" | awk '{print $2}')}")
-        rm -rf "${targets[@]}"
+        # du -sh: SIZE<TAB>PATH — cut conserva espacios en la ruta
+        targets=("${(@f)$(echo "$found" | cut -f2-)}")
+        rm -rf -- "${targets[@]}"
         echo "${C_GREEN}✅ node_modules eliminados. Restaura con: usePm i${C_RESET}"
     else
         echo "⏭️  Cancelado."
@@ -72,14 +73,15 @@ _nmk_sweep() {
 
     if command -v gum &>/dev/null; then
         local sel
-        sel=$(echo "$found" | awk '{print $2}' | gum choose --no-limit \
+        # cut -f2- conserva espacios en rutas (du: SIZE<TAB>PATH)
+        sel=$(echo "$found" | cut -f2- | gum choose --no-limit \
             --header " 🧹 Marca con espacio, confirma con enter " \
             --placeholder "Selecciona node_modules a eliminar...")
         [[ -z "$sel" ]] && { echo "⏭️  Cancelado."; return 0; }
         local -a dels
         dels=("${(f)sel}")
         if _git_ask_yes_no "¿Eliminar ${#dels[@]} node_modules?"; then
-            rm -rf "${dels[@]}"
+            rm -rf -- "${dels[@]}"
             echo "${C_GREEN}✅ ${#dels[@]} node_modules eliminados${C_RESET}"
         fi
     else

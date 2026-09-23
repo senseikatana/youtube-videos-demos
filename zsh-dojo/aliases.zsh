@@ -132,6 +132,7 @@ alias useZinit='on_zinit'
 # ==============================================
 # 🔄 RELOAD
 # ==============================================
-alias reload-fs='source ~/.zsh/functions.zsh && echo "🔄 Funciones recargadas"'
+# Reloada el cargador del Dojo: primero el del repo/instalación vía DOJO_FUNCTIONS_DIR, luego ~/.zsh
+alias reload-fs='source "${DOJO_FUNCTIONS_DIR:h}/functions.zsh" 2>/dev/null || source ~/.zsh/functions.zsh; echo "🔄 Funciones recargadas"'
 alias reload-zs='source ~/.zshrc && echo "🔄 ZSH recargado"'
 alias reload='reload-zs && reload-fs && echo "🔄 Configuración completa recargada"'
