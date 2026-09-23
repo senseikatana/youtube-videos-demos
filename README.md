@@ -24,7 +24,7 @@ Nada de "esto lo dejamos como ejercicio": lo que ves en pantalla es lo que puede
 
 | Proyecto | Tema | Vídeo | Estado |
 |---|---|---|---|
-| [`workflow-zsh-linux/`](workflow-zsh-linux/) | Zsh Dojo — terminal con menús interactivos | *(pendiente)* | 🎥 En producción |
+| [`zsh-dojo/`](zsh-dojo/) | Zsh Dojo — workflow zsh con menús gum en Wave Terminal | *(pendiente)* | 🎥 En producción |
 
 > Cada proyecto se añade aquí al empezar su guion y se marca: 📝 idea → 🎥 en producción → ✅ publicado.
 
@@ -32,11 +32,13 @@ Nada de "esto lo dejamos como ejercicio": lo que ves en pantalla es lo que puede
 
 ```
 yt-videos-channel/
-├── workflow-zsh-linux/     # Vídeo 1: Zsh Dojo (config zsh modular con menús gum)
+├── zsh-dojo/               # Vídeo 1: Zsh Dojo (config zsh modular con menús gum en Wave Terminal)
 │   ├── functions/          #   módulos zsh (uno por dominio)
 │   ├── functions.zsh       #   cargador de módulos
+│   ├── aliases.zsh         #   fuente única de aliases
+│   ├── .zshrc              #   env, zinit, integraciones (local, gitignoreado)
 │   ├── README.md           #   documentación pública del vídeo
-│   └── guion-*.md          #   guion del vídeo (privado, gitignoreado)
+│   └── guion-zsh-dojo.md   #   guion del vídeo (privado, gitignoreado)
 ├── package.json            # tooling común del monorepo
 └── LICENSE                 # MIT
 ```
@@ -58,10 +60,11 @@ Trabajo en la rama `dev` y muevo a `main` al publicar cada vídeo.
 ![zsh](https://img.shields.io/badge/shell-zsh-4EAA25?logo=gnu-bash&logoColor=white)
 ![gum](https://img.shields.io/badge/men%C3%BAs-gum-FF5C57)
 ![fzf](https://img.shields.io/badge/fuzzy-fzf-2B6CB0)
+![Wave Terminal](https://img.shields.io/badge/terminal-Wave%20Terminal-00A8E8)
 ![bun](https://img.shields.io/badge/runtime-bun-FBF0DF?logo=bun&logoColor=black)
 ![gh](https://img.shields.io/badge/CLI-github%20cli-181717?logo=github)
 
-`zsh` · `gum` · `fzf` · `eza` · `bat` · `fd` · `bun` · `gh` · `yt-dlp`
+`zsh` · `Wave Terminal` · `gum` · `fzf` · `eza` · `bat` · `fd` · `bun` · `gh` · `yt-dlp`
 
 ## 📄 Licencia y privacidad
 
