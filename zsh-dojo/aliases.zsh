@@ -71,7 +71,7 @@ alias useLazy='on_lazy'
 # 🧭 NAVIGATION
 # ==============================================
 alias useGo='on_go'
-alias useConfZsh='fresh ~/.zshrc'
+alias useConfZsh='${EDITOR:-nano} ~/.zshrc'
 alias lsproj='on_lsproj'
 alias yz='on_yzcd'
 

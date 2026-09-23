@@ -2,7 +2,7 @@
 # ==============================================================================
 # 📦 PKG (Debian / Ubuntu) - Paquetes y actualizaciones (apt + flatpak + snap)
 # ==============================================================================
-# Port del módulo pkg.zsh (Arch/BigLinux) para sistemas con apt.
+# Port del módulo pkg.zsh (Arch) para sistemas con apt (Debian/Ubuntu).
 # AUTOCONTENIDO: solo necesita zsh (gum es opcional, hay fallback).
 #
 # Convive con pkg.zsh (Arch): función on_pkg_apt + helpers _apt_* (sin choques).

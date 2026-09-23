@@ -1,6 +1,6 @@
 # 🥋 Zsh Dojo — Workflow modular de terminal
 
-> Un `.zshrc` organizado en **módulos por dominio** con **funciones-dispatcher** que abren **menús interactivos** (`gum`) para hacerlo todo en 1 o 2 pasos: git, archivos, paquetes, updates, navegación y más. En Arch/BigLinux y también Debian/Ubuntu. Pensado para correr en cualquier terminal — en el vídeo, sobre **Wave Terminal** (blocks, paneles y atajos), con zsh + p10k + gum dentro.
+> Un `.zshrc` organizado en **módulos por dominio** con **funciones-dispatcher** que abren **menús interactivos** (`gum`) para hacerlo todo en 1 o 2 pasos: git, archivos, paquetes, updates, navegación y más. En Arch y derivados, y también Debian/Ubuntu. Pensado para correr en cualquier terminal — en el vídeo, sobre **Wave Terminal** (blocks, paneles y atajos), con zsh + p10k + gum dentro.
 
 🎬 *[Video explicando el workflow](URL-DEL-VIDEO)* — si llegaste desde YouTube, ¡bienvenido!
 

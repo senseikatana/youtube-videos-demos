@@ -51,21 +51,31 @@ on_download() {
     fi
 
     local args=()
+    # Destinos por defecto: XDG si existe; portable en $HOME
+    local vids="${XDG_VIDEOS_DIR:-}"
+    local music_dir="${XDG_MUSIC_DIR:-}"
+    if command -v xdg-user-dir &>/dev/null; then
+        [[ -z "$vids" ]] && vids="$(xdg-user-dir VIDEOS 2>/dev/null || echo "$HOME/Videos")"
+        [[ -z "$music_dir" ]] && music_dir="$(xdg-user-dir MUSIC 2>/dev/null || echo "$HOME/Music")"
+    fi
+    vids="${vids:-$HOME/Videos}"
+    music_dir="${music_dir:-$HOME/Music}"
+
     case "$mode" in
-        video|v) 
-            dir="${dir:-$HOME/Vídeos/youtube-videos}"
+        video|v)
+            dir="${dir:-$vids}"
             args=(-f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]" \
                 --merge-output-format mp4 --embed-thumbnail --add-metadata \
-                -o "$dir/%(title)s.%(ext)s") 
+                -o "$dir/%(title)s.%(ext)s")
             ;;
-        music|m|audio|a) 
-            dir="${dir:-$HOME/Música}"
+        music|m|audio|a)
+            dir="${dir:-$music_dir}"
             args=(-x --audio-format mp3 --audio-quality 0 \
                 --embed-thumbnail --add-metadata \
-                -o "$dir/%(title)s.%(ext)s") 
+                -o "$dir/%(title)s.%(ext)s")
             ;;
-        playlist|p) 
-            dir="${dir:-$HOME/Vídeos/youtube-playlists}"
+        playlist|p)
+            dir="${dir:-$vids}"
             args=(--yes-playlist \
                 -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]" \
                 --merge-output-format mp4 --embed-thumbnail --add-metadata \
@@ -73,7 +83,7 @@ on_download() {
             ;;
         *)
             echo "${C_RED}❌ Error: Modo inválido. Usa: video, music o playlist${C_RESET}"
-            return 1 
+            return 1
             ;;
     esac
 

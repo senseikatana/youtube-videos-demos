@@ -13,7 +13,7 @@ _nmk_help() {
     echo "${C_CYAN}Uso: useNmk <cmd> [dir]${C_RESET}"
     echo "  ls [dir]     Lista node_modules con su tamaño"
     echo "  rm [dir]     Elimina node_modules del proyecto (pide confirmación)"
-    echo "  sweep        Escanea ~/Proyectos y eliges cuáles eliminar con gum"
+    echo "  sweep        Escanea tu carpeta de proyectos (DOJO_PROJECTS_DIR) y eliges cuáles eliminar con gum"
     echo "  locks [dir]  Elimina lockfiles y limpia caché de npm (opt-in)"
     echo "Solo toca node_modules y lockfiles — nunca tu código."
     echo "Para restaurar: usePm i en el proyecto."
@@ -58,7 +58,7 @@ _nmk_rm() {
 }
 
 _nmk_sweep() {
-    local base="${1:-$HOME/Proyectos}"
+    local base="${1:-${DOJO_PROJECTS_DIR:-$HOME/projects}}"
     [[ -d "$base" ]] || { echo "${C_RED}❌ No existe $base${C_RESET}"; return 1; }
     local found
     found=$(_nmk_find "$base")
@@ -123,7 +123,7 @@ on_nmk() {
             local opt
             if command -v gum &>/dev/null; then
                 opt=$(gum choose \
-                    "sweep · escanear ~/Proyectos y elegir" \
+                    "sweep · escanear ${DOJO_PROJECTS_DIR:-$HOME/projects} y elegir" \
                     "ls · node_modules aquí (tamaños)" \
                     "rm · limpiar proyecto actual" \
                     "locks · lockfiles + caché npm" \
